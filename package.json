@@ -6,6 +6,10 @@
     "test": "npx hardhat test"
   },
   "devDependencies": {
-    "@nomicfoundation/hardhat-toolbox": "^3.0.0"
+    "@nomicfoundation/hardhat-toolbox": "^3.0.0",
+    "hardhat": "^2.26.3"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts-upgradeable": "^5.4.0"
   }
 }

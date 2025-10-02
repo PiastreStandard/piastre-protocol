@@ -15,3 +15,4 @@ states/
 .env.local
 
 .DS_store
+node_modules

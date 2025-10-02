@@ -1,11 +1,15 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.22;
+
+import "hardhat/console.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 interface IUpgradeable {
-    function upgradeTo(address newImplementation) external;
+    function upgradeToAndCall(address newImpl, bytes calldata data) external;
 }
 
-contract Governance {
+contract Governance is Initializable, UUPSUpgradeable {
     struct Proposal {
         address proposer;
         address target;
@@ -25,13 +29,39 @@ contract Governance {
     uint256 public proposalCount;
     uint256 public votingPeriod = 3 days;
     mapping(uint256 => Proposal) public proposals;
-    mapping(address => uint256) public votingPower; // TODO: Replace with PiastreBTC.balanceOf()
+    mapping(address => uint256) public votingPower;
     mapping(uint256 => mapping(address => bool)) public hasVoted;
+
+    // New: track voters for top-governor snapshot
+    uint256 public voterCount;
+    mapping(uint256 => address) public voterList;
 
     event ProposalCreated(uint256 indexed proposalId, address proposer, address target, address newImpl);
     event Voted(uint256 indexed proposalId, address voter, bool support);
     event GovernorVoted(uint256 indexed proposalId, address governor, bool support);
     event Executed(uint256 indexed proposalId);
+
+    uint256 public version;
+
+    function initialize(uint256 _version) public initializer {
+        __UUPSUpgradeable_init();
+        version = _version;
+        votingPeriod = 3 days;
+    }
+
+
+    function reinitialize(uint256 _newVersion) public reinitializer(2) {
+        version = _newVersion;
+    }
+
+    function _authorizeUpgrade(address) internal override {
+        // allow either the proxy itself or the governance contract to trigger upgrade
+
+        require(
+            msg.sender == address(this),
+            "Only Governance can upgrade"
+        );
+    }
 
     modifier onlyEligible() {
         require(votingPower[msg.sender] > 0, "No voting power");
@@ -42,12 +72,11 @@ contract Governance {
         address target,
         address newImpl
     ) external onlyEligible returns (uint256) {
-        proposalCount++;
-
-        // Snapshot top 10 governors by voting power
+        uint256 proposalId = proposalCount++;
+        
         address[] memory topGovernors = getTopGovernors();
 
-        Proposal storage p = proposals[proposalCount];
+        Proposal storage p = proposals[proposalId];
         p.proposer = msg.sender;
         p.target = target;
         p.newImplementation = newImpl;
@@ -55,8 +84,31 @@ contract Governance {
         p.totalVotingPowerAtCreation = getTotalVotingPower();
         p.governorsAtCreation = topGovernors;
 
-        emit ProposalCreated(proposalCount, msg.sender, target, newImpl);
-        return proposalCount;
+        emit ProposalCreated(proposalId, msg.sender, target, newImpl);
+        return proposalId;
+    }
+
+    function getProposal(uint256 id) external view returns (
+        address proposer,
+        address target,
+        address newImplementation,
+        uint256 votesFor,
+        uint256 votesAgainst,
+        uint256 totalVotingPowerAtCreation,
+        uint256 deadline,
+        bool executed
+    ) {
+        Proposal storage p = proposals[id];
+        return (
+            p.proposer,
+            p.target,
+            p.newImplementation,
+            p.votesFor,
+            p.votesAgainst,
+            p.totalVotingPowerAtCreation,
+            p.deadline,
+            p.executed
+        );
     }
 
     function vote(uint256 proposalId, bool support) external onlyEligible {
@@ -97,9 +149,8 @@ contract Governance {
         require(!p.executed, "Already executed");
 
         bool passed;
-
-        // Normal proposals: either community passes OR governors override
         uint256 totalVotes = p.votesFor + p.votesAgainst;
+
         if (totalVotes * 100 / p.totalVotingPowerAtCreation >= 50) {
             passed = p.votesFor > p.votesAgainst;
         } else if (p.governorVotesCast >= 6 && (p.governorVotesFor * 100 / p.governorVotesCast) > 50) {
@@ -107,20 +158,38 @@ contract Governance {
         }
 
         require(passed, "Proposal did not pass");
-        IUpgradeable(p.target).upgradeTo(p.newImplementation);
-        p.executed = true;
+        // Call the proxy upgradeToAndCall externally
+        IUpgradeable(p.target).upgradeToAndCall(
+            p.newImplementation,
+            abi.encodeWithSignature("reinitialize(uint256)", version + 1)
+        );
 
+        p.executed = true;
         emit Executed(proposalId);
     }
 
-    // ---- Governance Utilities (mocked for now) ----
-
-    function getTopGovernors() internal pure returns (address[] memory) {
-        // TODO: Replace with logic to pull top 10 PiastreBTC holders
-        address[] memory top = new address[](10);
-        for (uint256 i = 0; i < 10; i++) {
-            top[i] = address(uint160(i + 1));
+    function getTopGovernors() internal view returns (address[] memory) {
+        address[] memory sorted = new address[](voterCount);
+        for (uint256 i = 0; i < voterCount; i++) {
+            sorted[i] = voterList[i];
         }
+
+        for (uint256 i = 0; i < voterCount; i++) {
+            for (uint256 j = i + 1; j < voterCount; j++) {
+                if (votingPower[sorted[j]] > votingPower[sorted[i]]) {
+                    address temp = sorted[i];
+                    sorted[i] = sorted[j];
+                    sorted[j] = temp;
+                }
+            }
+        }
+
+        uint256 topLen = voterCount < 10 ? voterCount : 10;
+        address[] memory top = new address[](topLen);
+        for (uint256 i = 0; i < topLen; i++) {
+            top[i] = sorted[i];
+        }
+
         return top;
     }
 
@@ -132,13 +201,19 @@ contract Governance {
         return false;
     }
 
-    function getTotalVotingPower() internal pure returns (uint256) {
-        // TODO: Replace with real supply snapshot
-        return 1000000;
+    function getTotalVotingPower() internal view returns (uint256) {
+        uint256 total = 0;
+        for (uint256 i = 0; i < voterCount; i++) {
+            total += votingPower[voterList[i]];
+        }
+        return total;
     }
 
-    // TEMPORARY: assign mock voting power manually
     function setVotingPower(address user, uint256 amount) external {
+        if (votingPower[user] == 0 && amount > 0) {
+            voterList[voterCount] = user;
+            voterCount++;
+        }
         votingPower[user] = amount;
     }
 }
