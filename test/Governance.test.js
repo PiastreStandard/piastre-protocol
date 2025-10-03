@@ -11,6 +11,7 @@ describe("Governance", function () {
     const Governance = await ethers.getContractFactory("Governance");
     governance = await Governance.deploy();
     await governance.waitForDeployment();
+    await governance.initialize(0);
 
     const DummyLogic = await ethers.getContractFactory("DummyLogic");
 
@@ -52,7 +53,7 @@ describe("Governance", function () {
   };
 
   it("should create a proposal", async () => {
-    const tx = await governance.connect(voters[0]).createProposal(dummyLogic.target, newDummyLogic.target);
+    const tx = await governance.connect(voters[0]).createProposal(dummyLogic.target, newDummyLogic.target, "0x");
     const proposalId = await getProposalIdFromTx(tx);
 
     expect(proposalId).to.not.be.undefined;
@@ -63,7 +64,7 @@ describe("Governance", function () {
   });
 
   it("should allow voting and execute if majority reached", async () => {
-    const tx = await governance.connect(voters[0]).createProposal(dummyLogic.target, newDummyLogic.target);
+    const tx = await governance.connect(voters[0]).createProposal(dummyLogic.target, newDummyLogic.target, "0x");
     const proposalId = await getProposalIdFromTx(tx);
 
     // Top voters vote YES (more than 50% of total)
@@ -78,7 +79,7 @@ describe("Governance", function () {
   });
 
   it("should allow governor override if no quorum", async () => {
-    const tx = await governance.connect(voters[0]).createProposal(dummyLogic.target, newDummyLogic.target);
+    const tx = await governance.connect(voters[0]).createProposal(dummyLogic.target, newDummyLogic.target, "0x");
     const proposalId = await getProposalIdFromTx(tx);
 
     for (let i = 0; i < 6; i++) {
@@ -92,7 +93,7 @@ describe("Governance", function () {
   });
 
   it("should reject execution if no quorum or governor majority", async () => {
-    const tx = await governance.connect(voters[0]).createProposal(dummyLogic.target, newDummyLogic.target);
+    const tx = await governance.connect(voters[0]).createProposal(dummyLogic.target, newDummyLogic.target, "0x");
     const proposalId = await getProposalIdFromTx(tx);
 
     await governance.connect(voters[10]).vote(proposalId, true); // low-vote YES

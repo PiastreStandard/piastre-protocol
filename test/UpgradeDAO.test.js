@@ -36,6 +36,7 @@ describe("PiastreManager + Governance upgradeDAO test", function () {
 
     daoLogicV1 = await Governance.deploy();
     await daoLogicV1.waitForDeployment();
+    // await daoLogicV1.initialize(0);
 
     daoProxy = await Proxy.deploy(daoLogicV1.target, "0x");
     await daoProxy.waitForDeployment();
@@ -77,7 +78,8 @@ describe("PiastreManager + Governance upgradeDAO test", function () {
 
     const tx = await DAOProxy.connect(voters[0]).createProposal(
       daoProxy.target,
-      daoLogicV2.target
+      daoLogicV2.target, 
+      "0x"
     );
     const proposalId = await getProposalIdFromTx(tx);
 

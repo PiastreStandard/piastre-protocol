@@ -13,7 +13,8 @@ contract Governance is Initializable, UUPSUpgradeable {
     struct Proposal {
         address proposer;
         address target;
-        address newImplementation;
+        address newImplementation; // optional
+        bytes callData;            // <== NEW
         uint256 votesFor;
         uint256 votesAgainst;
         uint256 totalVotingPowerAtCreation;
@@ -27,7 +28,7 @@ contract Governance is Initializable, UUPSUpgradeable {
     }
 
     uint256 public proposalCount;
-    uint256 public votingPeriod = 3 days;
+    uint256 public votingPeriod;
     mapping(uint256 => Proposal) public proposals;
     mapping(address => uint256) public votingPower;
     mapping(uint256 => mapping(address => bool)) public hasVoted;
@@ -52,6 +53,7 @@ contract Governance is Initializable, UUPSUpgradeable {
 
     function reinitialize(uint256 _newVersion) public reinitializer(2) {
         version = _newVersion;
+        votingPeriod = 3 days;
     }
 
     function _authorizeUpgrade(address) internal override {
@@ -70,16 +72,18 @@ contract Governance is Initializable, UUPSUpgradeable {
 
     function createProposal(
         address target,
-        address newImpl
+        address newImpl,
+        bytes calldata callData
     ) external onlyEligible returns (uint256) {
         uint256 proposalId = proposalCount++;
-        
+
         address[] memory topGovernors = getTopGovernors();
 
         Proposal storage p = proposals[proposalId];
         p.proposer = msg.sender;
         p.target = target;
         p.newImplementation = newImpl;
+        p.callData = callData; // <== store calldata
         p.deadline = block.timestamp + votingPeriod;
         p.totalVotingPowerAtCreation = getTotalVotingPower();
         p.governorsAtCreation = topGovernors;
@@ -158,11 +162,22 @@ contract Governance is Initializable, UUPSUpgradeable {
         }
 
         require(passed, "Proposal did not pass");
-        // Call the proxy upgradeToAndCall externally
-        IUpgradeable(p.target).upgradeToAndCall(
-            p.newImplementation,
-            abi.encodeWithSignature("reinitialize(uint256)", version + 1)
-        );
+        
+        if (p.callData.length == 0) {
+            // Normal upgrade flow
+            IUpgradeable(p.target).upgradeToAndCall(
+                p.newImplementation,
+                abi.encodeWithSignature("reinitialize(uint256)", version + 1)
+            );
+        } else {
+            // General DAO call
+            (bool success, bytes memory result) = p.target.call(p.callData);
+            if (!success) {
+                assembly {
+                    revert(add(result, 32), mload(result))
+                }
+            }
+        }
 
         p.executed = true;
         emit Executed(proposalId);

@@ -8,6 +8,13 @@ contract PiastreManager {
     address public dao;
     address public minter;
 
+    address[] public vaults;
+    mapping(address => bool) public isVault;
+    address public defaultVault;
+
+    event VaultAdded(address indexed vault);
+    event DefaultVaultChanged(address indexed vault);
+
     constructor(
         address _pstImpl,
         address _daoImpl,
@@ -23,6 +30,7 @@ contract PiastreManager {
         _;
     }
 
+    // === Proxy Upgrades ===
     function upgradePST(address newImpl) external onlyDAO {
         (bool success, ) = pst.call(
             abi.encodeWithSignature("upgradeTo(address)", newImpl)
@@ -42,5 +50,35 @@ contract PiastreManager {
             abi.encodeWithSignature("upgradeTo(address)", newImpl)
         );
         require(success, "Minter upgrade failed");
+    }
+
+    // === Vault Registry ===
+    function addVault(address vault) external onlyDAO {
+        require(vault != address(0), "Invalid vault");
+        require(!isVault[vault], "Vault already added");
+
+        isVault[vault] = true;
+        vaults.push(vault);
+
+        emit VaultAdded(vault);
+    }
+
+    function setDefaultVault(address vault) external onlyDAO {
+        require(isVault[vault], "Vault not registered");
+        defaultVault = vault;
+        emit DefaultVaultChanged(vault);
+    }
+
+    function getVault() external view returns (address) {
+        require(defaultVault != address(0), "No default vault set");
+        return defaultVault;
+    }
+
+    function getVaults() external view returns (address[] memory) {
+        return vaults;
+    }
+
+    function vaultCount() external view returns (uint256) {
+        return vaults.length;
     }
 }
