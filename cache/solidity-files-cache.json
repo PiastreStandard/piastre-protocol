@@ -426,46 +426,6 @@
         "UUPSUpgradeable"
       ]
     },
-    "/Users/matjazkotnik/MyDocuments/smartContracts/piastre-protocol/contracts/ProxyUpgradeable.sol": {
-      "lastModificationDate": 1759163646623,
-      "contentHash": "32faa9e50999a2ab63638776e0a1a454",
-      "sourceName": "contracts/ProxyUpgradeable.sol",
-      "solcConfig": {
-        "version": "0.8.22",
-        "settings": {
-          "evmVersion": "paris",
-          "optimizer": {
-            "enabled": false,
-            "runs": 200
-          },
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata",
-                "storageLayout"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          }
-        }
-      },
-      "imports": [
-        "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol",
-        "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol"
-      ],
-      "versionPragmas": [
-        "^0.8.22"
-      ],
-      "artifacts": [
-        "ProxyUpgradeable"
-      ]
-    },
     "/Users/matjazkotnik/MyDocuments/smartContracts/piastre-protocol/contracts/Governance.sol": {
       "lastModificationDate": 1759528508182,
       "contentHash": "6970629e545fc3e4c1136032616fc846",
